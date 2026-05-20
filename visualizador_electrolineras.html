@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ Electrolineras Bucaramanga — Visualizador Interactivo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root {
+    --bg:        #060d1a;
+    --panel:     #0f1e30;
+    --border:    #1d3450;
+    --primary:   #38bdf8;
+    --green:     #34d399;
+    --gold:      #fbbf24;
+    --red:       #f87171;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --elec-fill: #1d4ed8;
+    --punto-fill:#15803d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: linear-gradient(135deg, #061428 0%, #0d2540 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+  }
+  header h1 { font-size: 1.15rem; color: var(--primary); font-weight: 700; }
+  header p  { font-size: 0.72rem; color: var(--muted); margin-top:2px; }
+  .badge {
+    background: var(--border); border-radius: 20px; padding: 3px 10px;
+    font-size: 0.7rem; color: var(--primary); border: 1px solid var(--primary);
+  }
+  header .spacer { flex: 1; }
+
+  /* ── CONTROLS BAR ── */
+  .controls-bar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 20px;
+    display: flex; align-items: center; gap: 16px;
+    flex-wrap: wrap; flex-shrink: 0;
+  }
+  .ctrl-group { display: flex; align-items: center; gap: 8px; }
+  .ctrl-label { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  input[type=range] {
+    width: 120px; accent-color: var(--primary); cursor: pointer;
+  }
+  .btn {
+    background: var(--border); color: var(--text); border: 1px solid #2d4a6e;
+    border-radius: 6px; padding: 5px 12px; font-size: 0.75rem;
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .btn:hover { background: #1d3450; border-color: var(--primary); color: var(--primary); }
+  .btn.active { background: var(--primary); color: #060d1a; border-color: var(--primary); font-weight:700; }
+  .btn.danger { border-color: var(--red); color: var(--red); }
+  .btn.danger:hover { background: var(--red); color: #060d1a; }
+  .sep { width: 1px; height: 24px; background: var(--border); }
+
+  /* ── MAIN LAYOUT ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── CANVAS ── */
+  #canvas-wrap {
+    flex: 1; position: relative; overflow: hidden; background: var(--bg);
+    cursor: grab;
+  }
+  #canvas-wrap:active { cursor: grabbing; }
+  #canvas-wrap svg { width: 100%; height: 100%; }
+
+  /* ── Tooltip ── */
+  #tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(6,13,26,0.96); border: 1px solid var(--primary);
+    border-radius: 8px; padding: 10px 14px; font-size: 0.8rem;
+    max-width: 240px; line-height: 1.6; opacity: 0;
+    transition: opacity 0.15s; box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    z-index: 100;
+  }
+  #tooltip h4 { color: var(--primary); margin-bottom: 4px; font-size: 0.85rem; }
+  #tooltip .t-row { display:flex; justify-content:space-between; gap:8px; }
+  #tooltip .t-val { color: var(--gold); font-weight:600; }
+
+  /* ── SIDE PANEL ── */
+  .side-panel {
+    width: 280px; background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+  }
+  .panel-section {
+    border-bottom: 1px solid var(--border); padding: 14px 16px;
+  }
+  .panel-section h3 {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); margin-bottom: 10px;
+  }
+  .stat-row { display: flex; justify-content: space-between; margin: 5px 0; font-size: 0.82rem; }
+  .stat-val { color: var(--primary); font-weight: 700; font-size: 0.9rem; }
+
+  /* Leyenda */
+  .leg { display:flex; align-items:center; gap:8px; margin:5px 0; font-size:0.8rem; }
+  .dot { width:13px; height:13px; border-radius:50%; flex-shrink:0; }
+  .line-sample { width:22px; height:3px; border-radius:2px; flex-shrink:0; }
+
+  /* Route result */
+  #route-panel { display:none; }
+  #route-panel.show { display:block; }
+  .route-node {
+    display:flex; align-items:center; gap:8px; padding:3px 0;
+    font-size:0.78rem;
+  }
+  .route-node .rn-icon { font-size:1rem; }
+  .route-node .rn-name { flex:1; }
+  .route-node .rn-dist { color:var(--gold); font-size:0.72rem; }
+
+  /* Dijkstra step display */
+  #dijkstra-info {
+    background: rgba(56,189,248,0.07); border: 1px solid var(--border);
+    border-radius:6px; padding:8px; margin-top:8px;
+    font-size:0.75rem; line-height:1.7; display:none;
+  }
+  #dijkstra-info.show { display:block; }
+  .step-highlight { color: var(--gold); font-weight:700; }
+
+  /* Battery bar */
+  .battery-wrap { margin-top:8px; }
+  .battery-label { font-size:0.72rem; color:var(--muted); margin-bottom:3px; }
+  .battery-bar { height:12px; background:#1d2d40; border-radius:6px; overflow:hidden; }
+  .battery-fill {
+    height:100%; border-radius:6px; transition: width 0.5s, background 0.3s;
+  }
+
+  /* Ranking bars */
+  .rank-row { margin: 5px 0; }
+  .rank-label { font-size:0.72rem; color:var(--text); display:flex; justify-content:space-between; }
+  .rank-bar-bg { height:7px; background:#1d2d40; border-radius:4px; margin-top:3px; }
+  .rank-bar-fill { height:100%; border-radius:4px; background:var(--primary); transition: width 0.8s; }
+
+  /* Status badge */
+  #status {
+    font-size:0.72rem; padding: 3px 8px; border-radius:4px;
+    background: rgba(56,189,248,0.1); border: 1px solid var(--border);
+    color: var(--primary);
+  }
+
+  /* Voronoi overlay */
+  .voronoi-cell { fill-opacity: 0.08; stroke-width: 1.5; stroke-opacity: 0.3; }
+
+  /* Animated vehicle */
+  #vehicle-dot { display:none; }
+
+  /* Traffic color scale annotation */
+  .traffic-scale {
+    display:flex; gap:2px; align-items:center; margin-top:4px;
+  }
+  .ts-block { width:14px; height:8px; border-radius:2px; }
+
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50%      { opacity:0.6; transform:scale(1.15); }
+  }
+  .pulsing { animation: pulse 1.5s infinite; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ HEADER ═══════════════════════════ -->
+<header>
+  <div>
+    <h1>⚡ Sistema de Electrolineras — Área Metropolitana de Bucaramanga</h1>
+    <p>Dígrafo Ponderado G = (V, E, W) · Teoría de Grafos + IA · UIS Ingeniería en Ciencia de Datos 2026-1</p>
+  </div>
+  <div class="spacer"></div>
+  <span class="badge">V=18 E=90</span>
+  <span id="status">Listo</span>
+</header>
+
+<!-- ═══════════════════════════ CONTROLS ═══════════════════════════ -->
+<div class="controls-bar">
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">🕐 Hora:</span>
+    <input type="range" id="hora-slider" min="0" max="23" value="12" step="1">
+    <span id="hora-label" style="font-size:0.8rem;color:var(--gold);min-width:60px">12:00 h</span>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="ctrl-group">
+    <span class="ctrl-label">🌤 Clima:</span>
+    <button class="btn active" data-clima="0">Despejado</button>
+    <button class="btn" data-clima="1">🌧 Lluvia</button>
+    <button class="btn" data-clima="2">☀ Calor</button>
+    <button class="btn" data-clima="3">⛈ Tormenta</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="ctrl-group">
+    <button class="btn" id="btn-voronoi">🗺 Voronoi</button>
+    <button class="btn" id="btn-weights">⚖ Pesos</button>
+    <button class="btn" id="btn-centrality">📊 Centralidad</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="ctrl-group">
+    <button class="btn active" id="btn-dijkstra" style="border-color:var(--gold);color:var(--gold)">
+      🗺 Calcular Ruta (clic nodo verde)
+    </button>
+    <button class="btn" id="btn-simulate">🚗 Simular Vehículo</button>
+    <button class="btn danger" id="btn-reset">✕ Limpiar</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="ctrl-group" style="align-items:center;flex-wrap:wrap;gap:6px">
+    <span class="ctrl-label">🚗 Vehículo:</span>
+    <button class="btn active" id="veh-1" data-veh="1" style="font-size:0.7rem">Mini Aceman E</button>
+    <button class="btn" id="veh-2" data-veh="2" style="font-size:0.7rem">Porsche Taycan</button>
+    <span class="ctrl-label" style="margin-left:8px">🔋 Batería:</span>
+    <input type="range" id="bat-slider" min="5" max="100" value="75"
+           style="width:90px;accent-color:var(--green)">
+    <span id="bat-init-label" style="color:var(--green);font-size:0.82rem;min-width:36px">75%</span>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════ MAIN ═══════════════════════════ -->
+<div class="main">
+
+  <!-- CANVAS -->
+  <div id="canvas-wrap">
+    <svg id="graph-svg">
+      <defs>
+        <marker id="arrow-gray" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#2d4a6e"/>
+        </marker>
+        <marker id="arrow-traffic" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" id="arrow-traffic-path" fill="#2d4a6e"/>
+        </marker>
+        <marker id="arrow-route" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#fbbf24"/>
+        </marker>
+        <marker id="arrow-visited" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#f97316"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-gold">
+          <feGaussianBlur stdDeviation="5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <radialGradient id="node-elec-grad" cx="35%" cy="35%">
+          <stop offset="0%" stop-color="#60a5fa"/>
+          <stop offset="100%" stop-color="#1d4ed8"/>
+        </radialGradient>
+        <radialGradient id="node-punto-grad" cx="35%" cy="35%">
+          <stop offset="0%" stop-color="#6ee7b7"/>
+          <stop offset="100%" stop-color="#15803d"/>
+        </radialGradient>
+        <radialGradient id="node-route-grad" cx="35%" cy="35%">
+          <stop offset="0%" stop-color="#fde68a"/>
+          <stop offset="100%" stop-color="#d97706"/>
+        </radialGradient>
+      </defs>
+
+      <!-- Groups in render order -->
+      <g id="g-voronoi"></g>
+      <g id="g-links"></g>
+      <g id="g-link-labels"></g>
+      <g id="g-nodes"></g>
+      <g id="g-node-labels"></g>
+      <g id="g-vehicle">
+        <circle id="vehicle-dot" r="9" fill="#f0f" stroke="white" stroke-width="2"/>
+        <text id="vehicle-icon" text-anchor="middle" dominant-baseline="central"
+              font-size="14" style="display:none">🚗</text>
+      </g>
+    </svg>
+    <div id="tooltip"></div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="side-panel">
+
+    <div class="panel-section">
+      <h3>📊 Estadísticas del Grafo</h3>
+      <div class="stat-row">Tipo <span class="stat-val">DiGraph dirigido</span></div>
+      <div class="stat-row">Nodos V <span class="stat-val">18</span></div>
+      <div class="stat-row">Aristas E <span class="stat-val">90</span></div>
+      <div class="stat-row">Electrolineras <span class="stat-val">8</span></div>
+      <div class="stat-row">Puntos fijos <span class="stat-val">10</span></div>
+      <div class="stat-row" id="stat-hora">Factor tráfico <span class="stat-val" id="f-trafico">×1.38</span></div>
+      <div class="stat-row">Clima actual <span class="stat-val" id="clima-name">Despejado</span></div>
+    </div>
+
+    <div class="panel-section">
+      <h3>🎨 Leyenda</h3>
+      <div class="leg"><div class="dot" style="background:url(#node-elec-grad);background:#1d4ed8;border:2px solid #60a5fa"></div> Electrolinera</div>
+      <div class="leg"><div class="dot" style="background:#15803d;border:2px solid #6ee7b7"></div> Punto fijo (origen)</div>
+      <div class="leg"><div class="dot" style="background:#d97706;border:2px solid #fde68a"></div> Nodo en ruta óptima</div>
+      <div class="leg"><div class="line-sample" style="background:var(--gold)"></div> Ruta Dijkstra</div>
+      <div class="leg"><div class="line-sample" style="background:#f97316"></div> Arista visitada</div>
+      <div class="leg"><div class="line-sample" style="background:#2d4a6e;opacity:0.7"></div> Arista base</div>
+      <div class="ctrl-label" style="margin-top:8px">Escala de tráfico (hora):</div>
+      <div class="traffic-scale">
+        <div class="ts-block" style="background:#22c55e"></div>
+        <div class="ts-block" style="background:#86efac"></div>
+        <div class="ts-block" style="background:#fbbf24"></div>
+        <div class="ts-block" style="background:#f97316"></div>
+        <div class="ts-block" style="background:#ef4444"></div>
+        <span style="font-size:0.65rem;color:var(--muted);margin-left:4px">bajo → alto tráfico</span>
+      </div>
+    </div>
+
+    <div class="panel-section" id="route-panel">
+      <h3>🗺 Ruta Óptima (Dijkstra)</h3>
+      <div id="route-list"></div>
+      <div id="dijkstra-info"></div>
+    </div>
+
+    <div class="panel-section">
+      <h3>🏆 Ranking Electrolineras</h3>
+      <div id="ranking-list"></div>
+    </div>
+
+    <div class="panel-section" id="vehicle-panel" style="display:none">
+      <h3>🚗 Simulación de Vehículo</h3>
+      <div class="battery-wrap">
+        <div class="battery-label">Nivel de batería: <span id="bat-pct">100%</span></div>
+        <div class="battery-bar">
+          <div class="battery-fill" id="bat-fill" style="width:100%;background:var(--green)"></div>
+        </div>
+      </div>
+      <div id="vehicle-status" style="margin-top:8px;font-size:0.78rem;color:var(--muted)"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// DATA EMBEBIDA — Red vial del Área Metropolitana de Bucaramanga
+// ══════════════════════════════════════════════════════════════════
+
+const ELECTROLINERAS = {
+  0:"Homecenter", 1:"CC Quinta Etapa", 2:"CC Cacique",
+  3:"CC Cañaveral", 4:"Terpel Piedecuesta", 5:"Éxito Rosita",
+  6:"CC La Florida", 7:"Promotores del Oriente (Girón)"
+};
+const PUNTOS_FIJOS = {
+  8:"UIS Campus Central", 9:"UIS Campus Florida",
+  10:"UIS Guatiguará (Piedecuesta)", 11:"UIS Campus Bucarica",
+  12:"CENFER", 13:"UNAB", 14:"UTS", 15:"UPB",
+  16:"PTAR Río Frío", 17:"Sede Catay"
+};
+
+// Posiciones normalizadas (0-1) basadas en geografía de Bucaramanga
+// Norte (Girón/Quinta Etapa) arriba, Sur (Piedecuesta) abajo
+// Occidente (La Florida/Girón) izq, Oriente (Cañaveral) derecha
+const RAW_POS = {
+  0: [0.52,0.23],  // Homecenter — norte-centro
+  1: [0.47,0.12],  // CC Quinta Etapa — norte
+  2: [0.64,0.29],  // CC Cacique — nororiente
+  3: [0.67,0.48],  // CC Cañaveral — centro-oriente
+  4: [0.70,0.71],  // Terpel Piedecuesta — suroriente
+  5: [0.61,0.61],  // Éxito Rosita — sur-centro
+  6: [0.30,0.31],  // CC La Florida — nororoccidente
+  7: [0.14,0.36],  // Promotores del Oriente (Girón) — occidente
+  8: [0.57,0.35],  // UIS Campus Central — centro
+  9: [0.34,0.28],  // UIS Campus Florida — noroccidente
+  10:[0.66,0.82],  // UIS Guatiguará (Piedecuesta) — sur
+  11:[0.53,0.25],  // UIS Campus Bucarica — norte-centro
+  12:[0.55,0.30],  // CENFER — centro
+  13:[0.59,0.21],  // UNAB — norte-centro
+  14:[0.63,0.38],  // UTS — centro-oriente
+  15:[0.61,0.31],  // UPB — centro-oriente
+  16:[0.34,0.51],  // PTAR Río Frío — suroccidente
+  17:[0.26,0.41],  // Sede Catay — occidente
+};
+
+// Aristas dirigidas [origen, destino, km_base]
+const ARISTAS_RAW = [
+  [0,1,3.2],[1,0,3.9],[0,2,4.5],[2,0,5.2],[0,7,9.1],[7,0,9.8],
+  [1,2,2.8],[2,1,3.1],[1,3,4.0],[3,1,4.7],[2,3,5.1],[3,2,5.6],
+  [2,6,5.5],[6,2,6.1],[3,4,8.7],[4,3,9.3],[3,5,4.2],[5,3,4.9],
+  [5,6,6.3],[6,5,7.0],[6,7,7.8],[7,6,8.4],[4,5,6.5],[5,4,7.0],
+  [8,9,3.5],[9,8,4.2],[8,11,2.1],[11,8,2.9],[8,12,1.8],[12,8,2.3],
+  [8,13,2.4],[13,8,3.0],[9,16,4.2],[16,9,4.9],[11,12,1.5],[12,11,2.0],
+  [12,13,2.2],[13,12,2.7],[13,14,3.0],[14,13,3.5],[14,15,2.7],[15,14,3.2],
+  [15,8,3.3],[8,15,3.9],[16,17,5.0],[17,16,5.6],[17,9,4.1],[9,17,4.8],
+  [10,16,4.5],[16,10,5.0],[8,14,4.5],[14,8,5.1],[11,13,2.8],[13,11,3.3],
+  [8,0,2.5],[0,8,3.2],[8,2,3.8],[2,8,4.4],[9,6,2.9],[6,9,3.5],
+  [10,4,3.1],[4,10,3.7],[10,3,9.5],[3,10,10.3],[11,1,3.4],[1,11,4.0],
+  [11,0,3.0],[0,11,3.6],[12,0,4.1],[0,12,4.8],[12,2,3.3],[2,12,3.9],
+  [13,2,3.6],[2,13,4.2],[13,1,4.2],[1,13,4.8],[14,3,4.8],[3,14,5.4],
+  [15,2,4.0],[2,15,4.6],[15,3,5.5],[3,15,6.1],[16,5,5.2],[5,16,5.9],
+  [16,7,6.8],[7,16,7.4],[17,6,3.7],[6,17,4.3],[17,7,4.5],[7,17,5.1]
+];
+
+// Factores de tráfico por hora
+const TRAFICO_POR_HORA = {
+  0:0.78,1:0.74,2:0.70,3:0.68,4:0.72,5:0.88,
+  6:1.30,7:1.65,8:1.75,9:1.45,10:1.18,11:1.22,
+  12:1.38,13:1.32,14:1.16,15:1.24,16:1.50,17:1.80,
+  18:1.72,19:1.48,20:1.25,21:1.10,22:0.95,23:0.85
+};
+
+const CLIMAS = {
+  0:{nombre:"Despejado",  ft:1.00, fc:1.00},
+  1:{nombre:"Lluvia",     ft:1.25, fc:1.15},
+  2:{nombre:"Calor",      ft:1.05, fc:1.10},
+  3:{nombre:"Tormenta",   ft:1.55, fc:1.25}
+};
+
+// ── State ────────────────────────────────────────────────────────
+let state = {
+  hora: 12, clima: 0, showVoronoi: false, showWeights: false,
+  showCentrality: false, selectedOrigin: null, currentRoute: [],
+  currentDistances: {}, simulating: false
+};
+
+// ── Build graph data ─────────────────────────────────────────────
+const SVG = document.getElementById('graph-svg');
+let W = SVG.clientWidth  || 900;
+let H = SVG.clientHeight || 500;
+
+const nodes = Object.entries({...ELECTROLINERAS,...PUNTOS_FIJOS}).map(([id,name]) => ({
+  id: +id,
+  nombre: name,
+  tipo: +id < 8 ? 'electrolinera' : 'punto_fijo',
+  x: RAW_POS[id][0] * W,
+  y: RAW_POS[id][1] * H,
+  fx: RAW_POS[id][0],   // fractional (recalculated on resize)
+  fy: RAW_POS[id][1],
+}));
+
+const nodeById = {};
+nodes.forEach(n => nodeById[n.id] = n);
+
+const links = ARISTAS_RAW.map(([s,t,w]) => ({
+  source: s, target: t, peso_base: w, weight: w, id: `${s}-${t}`
+}));
+
+function getWeight(link) {
+  const ft = TRAFICO_POR_HORA[state.hora] * CLIMAS[state.clima].ft;
+  return +(link.peso_base * ft).toFixed(3);
+}
+
+// ── Traffic color scale ──────────────────────────────────────────
+const trafficColor = d3.scaleLinear()
+  .domain([0.68, 1.0, 1.3, 1.6, 1.8*1.55])
+  .range(['#22c55e','#86efac','#fbbf24','#f97316','#ef4444'])
+  .clamp(true);
+
+// ── Dijkstra (JS implementation) ─────────────────────────────────
+function dijkstra(sourceId) {
+  const dist  = {}, prev  = {}, visited = new Set();
+  nodes.forEach(n => { dist[n.id] = Infinity; prev[n.id] = null; });
+  dist[sourceId] = 0;
+
+  // Min-heap via sorted array (sufficient for V=18)
+  let queue = [{ id: sourceId, d: 0 }];
+
+  while (queue.length) {
+    queue.sort((a,b) => a.d - b.d);
+    const { id: u } = queue.shift();
+    if (visited.has(u)) continue;
+    visited.add(u);
+
+    links.filter(l => l.source === u).forEach(l => {
+      const v = l.target, w = getWeight(l);
+      if (dist[u] + w < dist[v]) {
+        dist[v] = dist[u] + w;
+        prev[v] = u;
+        queue.push({ id: v, d: dist[v] });
+      }
+    });
+  }
+  return { dist, prev };
+}
+
+function buildPath(prev, targetId) {
+  const path = [];
+  let cur = targetId;
+  while (cur !== null) { path.unshift(cur); cur = prev[cur]; }
+  return path;
+}
+
+// ── Betweenness centrality approximation ─────────────────────────
+function computeBetweenness() {
+  const bc = {};
+  nodes.forEach(n => bc[n.id] = 0);
+  nodes.forEach(src => {
+    const { dist, prev } = dijkstra(src.id);
+    nodes.forEach(tgt => {
+      if (tgt.id === src.id) return;
+      const path = buildPath(prev, tgt.id);
+      path.slice(1,-1).forEach(mid => bc[mid] += 1);
+    });
+  });
+  const max = Math.max(...Object.values(bc));
+  Object.keys(bc).forEach(k => bc[k] /= (max || 1));
+  return bc;
+}
+
+// Precompute on load
+let betweenness = {};
+setTimeout(() => { betweenness = computeBetweenness(); renderBetweenness(); }, 300);
+
+// ── D3 Setup ─────────────────────────────────────────────────────
+// ── D3 Zoom — transforms #everything so Voronoi + nodes move together ──
+const svgEl = d3.select('#graph-svg');
+const everything = svgEl.append('g').attr('id','everything');
+// Move all child groups into the wrapper so they zoom/pan as one unit
+['g-voronoi','g-links','g-link-labels','g-nodes','g-node-labels','g-vehicle'].forEach(id => {
+  everything.node().appendChild(document.getElementById(id));
+});
+
+const zoom = d3.zoom()
+  .scaleExtent([0.3, 4])
+  .on('zoom', e => {
+    d3.select('#everything').attr('transform', e.transform);
+  });
+
+svgEl.call(zoom);
+
+function screenPos(node) {
+  return { x: node.fx * W, y: node.fy * H };
+}
+
+function recalcPositions() {
+  W = SVG.clientWidth  || 900;
+  H = SVG.clientHeight || 500;
+  nodes.forEach(n => { n.x = n.fx * W; n.y = n.fy * H; });
+}
+
+// ── RENDER ───────────────────────────────────────────────────────
+
+function renderLinks() {
+  recalcPositions();
+  const routeSet = new Set();
+  if (state.currentRoute.length > 1) {
+    for (let i = 0; i < state.currentRoute.length-1; i++) {
+      routeSet.add(`${state.currentRoute[i]}-${state.currentRoute[i+1]}`);
+    }
+  }
+
+  const linkSel = d3.select('#g-links').selectAll('line.edge')
+    .data(links, d => d.id);
+
+  linkSel.enter().append('line')
+    .attr('class','edge')
+    .merge(linkSel)
+    .attr('x1', d => { const s=nodeById[d.source]; return s.x; })
+    .attr('y1', d => { const s=nodeById[d.source]; return s.y; })
+    .attr('x2', d => {
+      const s=nodeById[d.source], t=nodeById[d.target];
+      const dx=t.x-s.x, dy=t.y-s.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+      const r = t.tipo==='electrolinera' ? 20 : 16;
+      return t.x - dx/dist*(r+5);
+    })
+    .attr('y2', d => {
+      const s=nodeById[d.source], t=nodeById[d.target];
+      const dx=t.x-s.x, dy=t.y-s.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+      const r = t.tipo==='electrolinera' ? 20 : 16;
+      return t.y - dy/dist*(r+5);
+    })
+    .attr('stroke', d => {
+      const k = d.id;
+      if (routeSet.has(k)) return '#fbbf24';
+      const eff = getWeight(d);
+      return trafficColor(eff);
+    })
+    .attr('stroke-width', d => routeSet.has(d.id) ? 3.5 : 1.5)
+    .attr('opacity', d => routeSet.has(d.id) ? 1.0 : 0.45)
+    .attr('marker-end', d => routeSet.has(d.id) ? 'url(#arrow-route)' : 'url(#arrow-gray)')
+    .attr('filter', d => routeSet.has(d.id) ? 'url(#glow-gold)' : null);
+
+  linkSel.exit().remove();
+
+  // Weight labels
+  if (state.showWeights) {
+    const lblSel = d3.select('#g-link-labels').selectAll('text.wlabel')
+      .data(links.filter(l => !routeSet.has(l.id) || true), d=>d.id);
+    lblSel.enter().append('text').attr('class','wlabel')
+      .merge(lblSel)
+      .attr('x', d => (nodeById[d.source].x + nodeById[d.target].x)/2)
+      .attr('y', d => (nodeById[d.source].y + nodeById[d.target].y)/2 - 4)
+      .attr('text-anchor','middle').attr('font-size',8).attr('fill','#94a3b8')
+      .text(d => getWeight(d).toFixed(1));
+    lblSel.exit().remove();
+  } else {
+    d3.select('#g-link-labels').selectAll('text.wlabel').remove();
+  }
+}
+
+function renderNodes() {
+  const nodeSel = d3.select('#g-nodes').selectAll('circle.node')
+    .data(nodes, d=>d.id);
+
+  const routeSet = new Set(state.currentRoute);
+
+  nodeSel.enter().append('circle')
+    .attr('class','node')
+    .attr('cursor','pointer')
+    .on('click', nodeClicked)
+    .on('mouseover', nodeHover)
+    .on('mouseout', nodeOut)
+    .merge(nodeSel)
+    .attr('cx', d=>d.x).attr('cy', d=>d.y)
+    .attr('r', d => {
+      if (state.showCentrality && betweenness[d.id] !== undefined)
+        return 12 + betweenness[d.id] * 16;
+      return d.tipo==='electrolinera' ? 20 : 16;
+    })
+    .attr('fill', d => {
+      if (routeSet.has(d.id)) return 'url(#node-route-grad)';
+      return d.tipo==='electrolinera' ? 'url(#node-elec-grad)' : 'url(#node-punto-grad)';
+    })
+    .attr('stroke', d => {
+      if (d.id === state.selectedOrigin) return '#f0f';
+      if (routeSet.has(d.id)) return '#fde68a';
+      return d.tipo==='electrolinera' ? '#60a5fa' : '#6ee7b7';
+    })
+    .attr('stroke-width', d => routeSet.has(d.id) || d.id===state.selectedOrigin ? 3 : 1.5)
+    .attr('filter', d => routeSet.has(d.id) ? 'url(#glow)' : null);
+
+  nodeSel.exit().remove();
+
+  // Labels
+  const lblSel = d3.select('#g-node-labels').selectAll('text.nlabel')
+    .data(nodes, d=>d.id);
+  lblSel.enter().append('text').attr('class','nlabel')
+    .attr('pointer-events','none')
+    .merge(lblSel)
+    .attr('x', d=>d.x).attr('y', d=>d.y)
+    .attr('text-anchor','middle').attr('dominant-baseline','central')
+    .attr('font-size', 9).attr('font-weight','bold').attr('fill','white')
+    .text(d=>d.id);
+  lblSel.exit().remove();
+
+  // Short name labels below node
+  const nameSel = d3.select('#g-node-labels').selectAll('text.nnamelabel')
+    .data(nodes, d=>d.id);
+  const routeSetArr = new Set(state.currentRoute);
+  nameSel.enter().append('text').attr('class','nnamelabel')
+    .attr('pointer-events','none')
+    .merge(nameSel)
+    .attr('x', d=>d.x)
+    .attr('y', d=>d.y + (d.tipo==='electrolinera'?25:20))
+    .attr('text-anchor','middle').attr('font-size',8).attr('fill','#94a3b8')
+    .attr('opacity', d => routeSetArr.has(d.id) ? 1 : 0.7)
+    .attr('fill', d => routeSetArr.has(d.id) ? '#fde68a' : '#94a3b8')
+    .text(d => {
+      const s = d.nombre.replace('CC ','').replace('UIS Campus ','UIS ').replace('Centro Comercial ','');
+      return s.length > 14 ? s.slice(0,13)+'…' : s;
+    });
+  nameSel.exit().remove();
+}
+
+function renderVoronoi() {
+  d3.select('#g-voronoi').selectAll('*').remove();
+  if (!state.showVoronoi) return;
+
+  const electros = nodes.filter(n => n.tipo==='electrolinera');
+  const voronoi = d3.Delaunay.from(electros, d=>d.x, d=>d.y).voronoi([0,0,W,H]);
+  const colors = d3.schemeTableau10;
+
+  electros.forEach((e,i) => {
+    const cell = voronoi.renderCell(i);
+    if (!cell) return;
+    d3.select('#g-voronoi').append('path')
+      .attr('d', cell)
+      .attr('fill', colors[i % colors.length])
+      .attr('class','voronoi-cell')
+      .attr('stroke', colors[i % colors.length])
+      .append('title').text(`Zona: ${e.nombre}`);
+  });
+}
+
+function renderBetweenness() {
+  // Update node sizes when centrality is toggled
+  renderNodes();
+}
+
+function renderAll() { renderLinks(); renderNodes(); renderVoronoi(); }
+
+// ── ROUTE PANEL ──────────────────────────────────────────────────
+function updateRoutePanel(route, dist) {
+  const panel = document.getElementById('route-panel');
+  const list  = document.getElementById('route-list');
+  const info  = document.getElementById('dijkstra-info');
+
+  if (!route || route.length < 2) { panel.classList.remove('show'); return; }
+  panel.classList.add('show');
+
+  const allNames = {...ELECTROLINERAS,...PUNTOS_FIJOS};
+  let html = '';
+  let cumDist = 0;
+
+  route.forEach((nid, i) => {
+    if (i > 0) {
+      const link = links.find(l => l.source === route[i-1] && l.target === nid);
+      if (link) cumDist += getWeight(link);
+    }
+    const isLast = i === route.length-1;
+    const icon = nid < 8 ? '⚡' : '📍';
+    html += `<div class="route-node">
+      <span class="rn-icon">${icon}</span>
+      <span class="rn-name">${allNames[nid]}</span>
+      <span class="rn-dist">${cumDist.toFixed(2)} km</span>
+    </div>`;
+    if (!isLast) html += `<div style="padding-left:20px;font-size:10px;color:var(--muted)">↓</div>`;
+  });
+
+  list.innerHTML = html;
+
+  const totalDist = dist !== undefined ? dist : cumDist;
+  info.innerHTML = `
+    <div><span class="step-highlight">Algoritmo:</span> Dijkstra sobre DiGraph</div>
+    <div><span class="step-highlight">Origen:</span> ${allNames[route[0]]}</div>
+    <div><span class="step-highlight">Destino:</span> ${allNames[route[route.length-1]]}</div>
+    <div><span class="step-highlight">Nodos recorridos:</span> ${route.length}</div>
+    <div><span class="step-highlight">Distancia efectiva:</span> ${totalDist.toFixed(3)} km</div>
+    <div><span class="step-highlight">Factor tráfico:</span> ×${(TRAFICO_POR_HORA[state.hora]*CLIMAS[state.clima].ft).toFixed(2)}</div>
+  `;
+  info.classList.add('show');
+}
+
+// ── RANKING ──────────────────────────────────────────────────────
+function updateRanking(dist) {
+  const list = document.getElementById('ranking-list');
+  if (!dist) { list.innerHTML = '<div style="font-size:0.75rem;color:var(--muted)">Haz clic en un punto fijo (🟢) para ver el ranking.</div>'; return; }
+
+  const sorted = Object.entries(ELECTROLINERAS)
+    .map(([id,name]) => ({ id:+id, name, d: dist[+id] ?? Infinity }))
+    .filter(e => e.d < Infinity)
+    .sort((a,b) => a.d-b.d);
+
+  const maxD = sorted[sorted.length-1]?.d || 1;
+  list.innerHTML = sorted.map((e,i) => `
+    <div class="rank-row">
+      <div class="rank-label">
+        <span>${i===0?'🥇':i===1?'🥈':i===2?'🥉':'  '} ${e.name}</span>
+        <span style="color:var(--gold)">${e.d.toFixed(2)} km</span>
+      </div>
+      <div class="rank-bar-bg">
+        <div class="rank-bar-fill" style="width:${(1-e.d/maxD)*100}%;background:${i===0?'var(--gold)':'var(--primary)'}"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── NODE INTERACTIONS ────────────────────────────────────────────
+function nodeClicked(event, d) {
+  event.stopPropagation();
+  if (state.simulating) return;
+
+  if (d.tipo === 'punto_fijo') {
+    state.selectedOrigin = d.id;
+    const { dist, prev } = dijkstra(d.id);
+    state.currentDistances = dist;
+
+    // Find nearest electrolinera
+    let minDist = Infinity, nearestId = null, nearestPrev = null;
+    Object.keys(ELECTROLINERAS).forEach(eid => {
+      if (dist[+eid] < minDist) {
+        minDist = dist[+eid]; nearestId = +eid; nearestPrev = prev;
+      }
+    });
+
+    if (nearestId !== null) {
+      const route = buildPath(nearestPrev, nearestId);
+      state.currentRoute = route;
+      updateRoutePanel(route, minDist);
+      updateRanking(dist);
+      setStatus(`✔ Ruta: ${PUNTOS_FIJOS[d.id]} → ${ELECTROLINERAS[nearestId]} (${minDist.toFixed(2)} km)`);
+    }
+
+    renderAll();
+
+  } else if (d.tipo === 'electrolinera') {
+    // Show all routes TO this electrolinera
+    tooltip_show(event, d);
+  }
+}
+
+function nodeHover(event, d) {
+  tooltip_show(event, d);
+}
+function nodeOut() {
+  document.getElementById('tooltip').style.opacity = 0;
+}
+
+function tooltip_show(event, d) {
+  const tt = document.getElementById('tooltip');
+  const allNames = {...ELECTROLINERAS,...PUNTOS_FIJOS};
+
+  let content = `<h4>${d.tipo==='electrolinera'?'⚡':'📍'} ${d.nombre}</h4>`;
+  content += `<div class="t-row"><span>ID</span><span class="t-val">${d.id}</span></div>`;
+  content += `<div class="t-row"><span>Tipo</span><span class="t-val">${d.tipo==='electrolinera'?'Electrolinera':'Punto fijo'}</span></div>`;
+
+  if (state.selectedOrigin !== null && state.currentDistances[d.id] !== undefined) {
+    const dist = state.currentDistances[d.id];
+    content += `<div class="t-row"><span>Dist. desde origen</span><span class="t-val">${dist===Infinity?'∞':dist.toFixed(2)+' km'}</span></div>`;
+  }
+  if (betweenness[d.id] !== undefined) {
+    content += `<div class="t-row"><span>Betweenness</span><span class="t-val">${betweenness[d.id].toFixed(3)}</span></div>`;
+  }
+  content += `<div style="margin-top:6px;font-size:0.7rem;color:var(--muted)">`;
+  if (d.tipo === 'punto_fijo') content += 'Clic → Calcular ruta Dijkstra';
+  else content += 'Electrolinera de carga';
+  content += `</div>`;
+
+  tt.innerHTML = content;
+  tt.style.opacity = 1;
+  const rect = SVG.getBoundingClientRect();
+  let tx = event.clientX - rect.left + 14;
+  let ty = event.clientY - rect.top  - 10;
+  if (tx + 250 > rect.width)  tx = event.clientX - rect.left - 260;
+  if (ty + 150 > rect.height) ty = event.clientY - rect.top  - 140;
+  tt.style.left = tx + 'px';
+  tt.style.top  = ty + 'px';
+}
+
+// ── STATUS ───────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+// ── VEHICLE SIMULATION ────────────────────────────────────────────
+async function simulateVehicle() {
+  if (!state.currentRoute || state.currentRoute.length < 2) {
+    setStatus('⚠ Primero calcula una ruta (clic en un nodo verde)');
+    return;
+  }
+  if (state.simulating) return;
+  state.simulating = true;
+
+  const panel = document.getElementById('vehicle-panel');
+  const batFill = document.getElementById('bat-fill');
+  const batPct  = document.getElementById('bat-pct');
+  const vStatus = document.getElementById('vehicle-status');
+  panel.style.display = 'block';
+
+  const dot  = document.getElementById('vehicle-dot');
+  const icon = document.getElementById('vehicle-icon');
+  dot.style.display  = 'block';
+  icon.style.display = 'block';
+
+  // Read selected vehicle and battery from controls
+  const vehId   = state.selectedVehicle || 1;
+  const VEHICLE_DATA = {
+    1: { nombre: 'Mini Aceman E',   bat_kwh: 38.5, consumo_wh_km: 167, icon: '🚗' },
+    2: { nombre: 'Porsche Taycan',  bat_kwh: 97.0, consumo_wh_km: 169, icon: '🏎' }
+  };
+  const veh = VEHICLE_DATA[vehId];
+  let battery = state.initBattery || 75;
+  vStatus.textContent = `${veh.icon} ${veh.nombre} | Batería inicial: ${battery}%`;
+  icon.textContent = veh.icon;
+
+  const route = state.currentRoute;
+
+  function updateBat(pct) {
+    pct = Math.max(0, Math.min(100, pct));
+    const col = pct > 50 ? '#34d399' : pct > 20 ? '#fbbf24' : '#f87171';
+    batFill.style.width  = pct + '%';
+    batFill.style.background = col;
+    batPct.textContent = pct.toFixed(1) + '%';
+  }
+  updateBat(battery);
+
+  const [transform] = [d3.zoomTransform(svgEl.node())];
+
+  for (let seg = 0; seg < route.length-1; seg++) {
+    const sNode = nodeById[route[seg]];
+    const tNode = nodeById[route[seg+1]];
+
+    const link = links.find(l => l.source===route[seg] && l.target===route[seg+1]);
+    const km = link ? link.peso_base : 2;
+    // Consumption: wh/km × climate factor → % of battery
+    const vehData2 = { 1: { bat_kwh:38.5, consumo_wh_km:167 }, 2: { bat_kwh:97.0, consumo_wh_km:169 } };
+    const vd = vehData2[state.selectedVehicle || 1];
+    const kwh_used = (vd.consumo_wh_km / 1000) * km * CLIMAS[state.clima].fc;
+    const consume = (kwh_used / vd.bat_kwh) * 100;
+
+    // Animate along segment
+    const steps = 40;
+    for (let t=0; t<=steps; t++) {
+      const f = t/steps;
+      const cx = sNode.x + (tNode.x-sNode.x)*f;
+      const cy = sNode.y + (tNode.y-sNode.y)*f;
+      dot.setAttribute('cx', cx);
+      dot.setAttribute('cy', cy);
+      icon.setAttribute('x', cx);
+      icon.setAttribute('y', cy);
+      const batNow = battery - consume*f;
+      updateBat(batNow);
+      vStatus.textContent = `Segmento ${seg+1}/${route.length-1} | ${km.toFixed(1)} km`;
+      await new Promise(r => setTimeout(r, 30));
+    }
+    battery -= consume;
+
+    if (battery <= 20) {
+      vStatus.textContent = '⚡ BATERÍA CRÍTICA — Recargando en electrolinera...';
+      dot.setAttribute('fill', '#f87171');
+      await new Promise(r => setTimeout(r, 1200));
+      break;
+    }
+  }
+
+  vStatus.textContent = battery > 20
+    ? `✔ Llegó a destino. Batería: ${battery.toFixed(1)}%`
+    : `⚡ Recarga completada en ${ELECTROLINERAS[route[route.length-1]] || 'electrolinera'}`;
+
+  await new Promise(r => setTimeout(r, 2000));
+  dot.style.display  = 'none';
+  icon.style.display = 'none';
+  state.simulating   = false;
+}
+
+// ── CONTROLS WIRING ──────────────────────────────────────────────
+// ── Vehicle + Battery controls ───────────────────────────────────
+document.querySelectorAll('[data-veh]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-veh]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.selectedVehicle = +btn.dataset.veh;
+  });
+});
+
+const batSlider = document.getElementById('bat-slider');
+const batInitLabel = document.getElementById('bat-init-label');
+batSlider.addEventListener('input', () => {
+  state.initBattery = +batSlider.value;
+  const pct = +batSlider.value;
+  batInitLabel.textContent = pct + '%';
+  batInitLabel.style.color = pct > 50 ? 'var(--green)' : pct > 20 ? '#fbbf24' : '#f87171';
+});
+
+const horaSlider = document.getElementById('hora-slider');
+const horaLabel  = document.getElementById('hora-label');
+
+horaSlider.addEventListener('input', () => {
+  state.hora = +horaSlider.value;
+  const ft = (TRAFICO_POR_HORA[state.hora] * CLIMAS[state.clima].ft).toFixed(2);
+  horaLabel.textContent = `${String(state.hora).padStart(2,'0')}:00 h`;
+  document.getElementById('f-trafico').textContent = '×'+ft;
+  const isPico = (state.hora>=6&&state.hora<=9) || (state.hora>=16&&state.hora<=19);
+  horaLabel.style.color = isPico ? '#f87171' : '#fbbf24';
+  renderLinks();
+  if (state.selectedOrigin !== null) {
+    // Recalculate route with new weights
+    const { dist, prev } = dijkstra(state.selectedOrigin);
+    state.currentDistances = dist;
+    let minDist=Infinity, nearestId=null;
+    Object.keys(ELECTROLINERAS).forEach(eid => {
+      if(dist[+eid]<minDist){minDist=dist[+eid];nearestId=+eid;}
+    });
+    if(nearestId!==null) {
+      state.currentRoute = buildPath(prev, nearestId);
+      updateRoutePanel(state.currentRoute, minDist);
+      updateRanking(dist);
+    }
+    renderAll();
+  }
+});
+
+document.querySelectorAll('[data-clima]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-clima]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.clima = +btn.dataset.clima;
+    document.getElementById('clima-name').textContent = CLIMAS[state.clima].nombre;
+    document.getElementById('f-trafico').textContent =
+      '×'+(TRAFICO_POR_HORA[state.hora]*CLIMAS[state.clima].ft).toFixed(2);
+    renderLinks();
+    if (state.selectedOrigin!==null) {
+      const {dist,prev}=dijkstra(state.selectedOrigin);
+      state.currentDistances=dist;
+      let minDist=Infinity,nearestId=null;
+      Object.keys(ELECTROLINERAS).forEach(eid=>{if(dist[+eid]<minDist){minDist=dist[+eid];nearestId=+eid;}});
+      if(nearestId!==null){state.currentRoute=buildPath(prev,nearestId);updateRoutePanel(state.currentRoute,minDist);updateRanking(dist);}
+      renderAll();
+    }
+  });
+});
+
+document.getElementById('btn-voronoi').addEventListener('click', () => {
+  state.showVoronoi = !state.showVoronoi;
+  document.getElementById('btn-voronoi').classList.toggle('active', state.showVoronoi);
+  renderVoronoi();
+});
+
+document.getElementById('btn-weights').addEventListener('click', () => {
+  state.showWeights = !state.showWeights;
+  document.getElementById('btn-weights').classList.toggle('active', state.showWeights);
+  renderLinks();
+});
+
+document.getElementById('btn-centrality').addEventListener('click', () => {
+  state.showCentrality = !state.showCentrality;
+  document.getElementById('btn-centrality').classList.toggle('active', state.showCentrality);
+  renderBetweenness();
+  setStatus(state.showCentrality ?
+    '📊 Tamaño proporcional a Betweenness Centrality (nodos más grandes = más críticos)' :
+    'Listo');
+});
+
+document.getElementById('btn-simulate').addEventListener('click', () => { simulateVehicle(); });
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  state.selectedOrigin = null;
+  state.currentRoute   = [];
+  state.currentDistances = {};
+  document.getElementById('route-panel').classList.remove('show');
+  document.getElementById('vehicle-panel').style.display = 'none';
+  updateRanking(null);
+  setStatus('Listo');
+  renderAll();
+});
+
+// Click on background → deselect
+svgEl.on('click', (event) => {
+  if (event.target === svgEl.node() || event.target.tagName === 'svg') {
+    state.selectedOrigin = null;
+    state.currentRoute = [];
+    renderAll();
+  }
+});
+
+// ── RESIZE ───────────────────────────────────────────────────────
+window.addEventListener('resize', () => { recalcPositions(); renderAll(); });
+
+// ── INITIAL RENDER ───────────────────────────────────────────────
+updateRanking(null);
+renderAll();
+setStatus('Clic en un nodo 🟢 (punto fijo) para calcular ruta Dijkstra');
+
+// ── ANIMATED DIJKSTRA TRACE (bonus: step-by-step animation) ──────
+async function animateDijkstra(sourceId) {
+  if (state.simulating) return;
+  state.simulating = true;
+  setStatus('⚡ Ejecutando Dijkstra paso a paso...');
+
+  const dist  = {}, prev = {}, visited = new Set();
+  nodes.forEach(n => { dist[n.id] = Infinity; prev[n.id] = null; });
+  dist[sourceId] = 0;
+  let queue = [{ id: sourceId, d: 0 }];
+
+  // Visual reset
+  d3.select('#g-links').selectAll('line.edge').attr('stroke','#2d4a6e').attr('opacity',0.3);
+
+  while (queue.length) {
+    queue.sort((a,b) => a.d - b.d);
+    const { id: u } = queue.shift();
+    if (visited.has(u)) continue;
+    visited.add(u);
+
+    // Highlight current node
+    d3.select('#g-nodes').selectAll('circle.node')
+      .filter(d2 => d2.id === u)
+      .attr('stroke','#f97316').attr('stroke-width',4);
+
+    // Highlight outgoing edges
+    const outEdges = links.filter(l => l.source === u);
+    d3.select('#g-links').selectAll('line.edge')
+      .filter(d2 => d2.source === u && !visited.has(d2.target))
+      .attr('stroke','#f97316').attr('opacity',0.8).attr('stroke-width',2)
+      .attr('marker-end','url(#arrow-visited)');
+
+    await new Promise(r => setTimeout(r, 180));
+
+    outEdges.forEach(l => {
+      const v = l.target, w = getWeight(l);
+      if (dist[u] + w < dist[v]) {
+        dist[v] = dist[u] + w;
+        prev[v] = u;
+        queue.push({ id: v, d: dist[v] });
+      }
+    });
+  }
+
+  // Find nearest electrolinera and highlight route
+  let minDist=Infinity, nearestId=null;
+  Object.keys(ELECTROLINERAS).forEach(eid => {
+    if (dist[+eid]<minDist){minDist=dist[+eid];nearestId=+eid;}
+  });
+  if (nearestId!==null) {
+    state.currentRoute = buildPath(prev, nearestId);
+    state.currentDistances = dist;
+    updateRoutePanel(state.currentRoute, minDist);
+    updateRanking(dist);
+  }
+
+  state.simulating = false;
+  renderAll();
+  setStatus(`✔ Dijkstra completo: ruta a ${ELECTROLINERAS[nearestId]} (${minDist.toFixed(2)} km)`);
+}
+
+// Override nodeClicked to use animated Dijkstra
+function nodeClicked(event, d) {
+  event.stopPropagation();
+  if (state.simulating) return;
+  if (d.tipo === 'punto_fijo') {
+    state.selectedOrigin = d.id;
+    animateDijkstra(d.id);
+  } else {
+    tooltip_show(event, d);
+  }
+}
+
+// Re-bind with animated version
+d3.select('#g-nodes').selectAll('circle.node').on('click', nodeClicked);
+</script>
+</body>
+</html>
