@@ -6,10 +6,7 @@
  Profesores: Cesar Augusto Aceros Moreno, PhD
               Rosaura Gutiérrez Almeyda, MSc
 ----------------------------------------------------------------
- Integrantes:
-   • Camilo Amaya Mora
-   • Johen Gustavo Castañeda García
-   • Hector Felipe Higuera
+ Autor: Camilo Amaya Mora
  Programa: Ingeniería en Ciencia de Datos – UIS | Semestre 2026-1
 ================================================================
 
