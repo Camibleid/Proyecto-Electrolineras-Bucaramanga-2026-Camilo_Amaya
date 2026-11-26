@@ -62,10 +62,9 @@ El programa abre un menú por consola. Empieza por la opción `1` (configurar el
 - Los recorridos son simulados, no datos reales de vehículos.
 - La estación elegida depende de incidentes aleatorios, lo que limita la accuracy del clasificador.
 
-## Equipo
+## Créditos
 
 Proyecto integrador 2026-1 de Algoritmos y Programación y Matemáticas Discretas, Universidad Industrial de Santander.
 
 - Camilo Amaya Mora
-- Johen Castañeda García
-- Hector Felipe Higuera Jurado
+
